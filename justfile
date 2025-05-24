@@ -14,7 +14,7 @@ serve_sync_anon:
     ./target/release/storescp -a -v -o ./out
 
 store:
-    time storescu --scan-directories --recurse -aet STORESCU -aec STORE-SCP localhost 11111 /Users/jsmits/d/data/nlst/dicom/203087-cleaned/T2 
+    fish -c "time storescu --scan-directories --recurse -aet STORESCU -aec STORE-SCP localhost 11111 /Users/jsmits/d/data/nlst/dicom/203087-cleaned/T2" 
 
 dump:
     dcmdump out/`ls out | head -n1`
