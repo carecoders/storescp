@@ -1,5 +1,7 @@
+use std::fs::File;
+use std::io::Cursor;
 use std::net::TcpStream;
-
+use dicom_anonymization::Anonymizer;
 use dicom_dictionary_std::tags;
 use dicom_encoding::transfer_syntax::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
@@ -60,6 +62,8 @@ pub fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever>
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
+
+    let anonymizer = Anonymizer::default();
 
     loop {
         match association.receive() {
@@ -180,14 +184,23 @@ pub fn run_store_sync(scu_stream: TcpStream, args: &App) -> Result<(), Whatever>
                                     )?;
                                 let file_obj = obj.with_exact_meta(file_meta);
 
+                                let out_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
+                                let mut cursor = Cursor::new(out_buffer);
+                                let _ = file_obj.write_all(&mut cursor);
+                                cursor.set_position(0);
+
+                                let anonymization_result = anonymizer.anonymize(cursor).unwrap();
+
                                 // write the files to the current directory with their SOPInstanceUID as filenames
                                 let mut file_path = out_dir.clone();
+
+                                // TODO: use anonymization_result's sop instance uid 
                                 file_path.push(
                                     sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm",
                                 );
-                                file_obj
-                                    .write_to_file(&file_path)
-                                    .whatever_context("could not save DICOM object to file")?;
+                                let output_file = File::create(&file_path)
+                                    .whatever_context(format!("failed to create {}", file_path.display()))?;
+                                let _ = anonymization_result.write(output_file);
                                 info!("Stored {}", file_path.display());
 
                                 // send C-STORE-RSP object

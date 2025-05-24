@@ -201,7 +201,6 @@ pub async fn run_store_async(
                                 file_path.push(
                                     sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm",
                                 );
-
                                 let output_file = File::create(&file_path)
                                     .whatever_context(format!("failed to create {}", file_path.display()))?;
                                 let _ = anonymization_result.write(output_file);
