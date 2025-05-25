@@ -200,18 +200,22 @@ pub async fn run_store_async(
                                         .whatever_context("could not save DICOM object to file")?;
                                     info!("Stored {}", file_path.display());
                                 } else {
-                                    let out_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
+                                    let mut out_buffer = Vec::new();
+                                    file_obj.write_all(&mut out_buffer)
+                                        .whatever_context("failed to write DICOM object to buffer")?;
                                     let mut cursor = Cursor::new(out_buffer);
-                                    let _ = file_obj.write_all(&mut cursor);
                                     cursor.set_position(0);
 
-                                    let anonymization_result = anonymizer.anonymize(cursor).unwrap();
+                                    let anonymization_result = anonymizer.anonymize(cursor)
+                                        .whatever_context("failed to anonymize DICOM object")?;
 
                                     // output file name
                                     let new_sop = anonymization_result.anonymized.get(tags::SOP_INSTANCE_UID);
                                     if let Some(new_sop_elem) = new_sop {
                                         // use anonymization result's sop instance uid in the output file name
-                                        let anon_sop_uid = new_sop_elem.to_str().unwrap().to_string();
+                                        let anon_sop_uid = new_sop_elem.to_str()
+                                            .whatever_context("could not retrieve anonymized SOP Instance UID")?
+                                            .to_string();
                                         file_path.push(
                                             anon_sop_uid.trim_end_matches('\0').to_string() + ".dcm",
                                         ); 
