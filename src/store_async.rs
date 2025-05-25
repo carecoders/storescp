@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::Cursor;
+use dicom_anonymization::Anonymizer;
 use dicom_dictionary_std::tags;
 use dicom_encoding::transfer_syntax::TransferSyntaxIndex;
 use dicom_object::{FileMetaTableBuilder, InMemDicomObject};
@@ -21,8 +24,10 @@ pub async fn run_store_async(
         out_dir,
         port: _,
         non_blocking: _,
+        anonymize,
     } = args;
     let verbose = *verbose;
+    let anonymize = *anonymize;
 
     let mut instance_buffer: Vec<u8> = Vec::with_capacity(1024 * 1024);
     let mut msgid = 1;
@@ -62,6 +67,8 @@ pub async fn run_store_async(
         "> Presentation contexts: {:?}",
         association.presentation_contexts()
     );
+
+    let anonymizer = Anonymizer::default();
 
     loop {
         match association.receive().await {
@@ -182,15 +189,48 @@ pub async fn run_store_async(
                                     )?;
                                 let file_obj = obj.with_exact_meta(file_meta);
 
-                                // write the files to the current directory with their SOPInstanceUID as filenames
                                 let mut file_path = out_dir.clone();
-                                file_path.push(
-                                    sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm",
-                                );
-                                file_obj
-                                    .write_to_file(&file_path)
-                                    .whatever_context("could not save DICOM object to file")?;
-                                info!("Stored {}", file_path.display());
+                                
+                                if !anonymize {
+                                    file_path.push(
+                                        sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm",
+                                    );
+                                    file_obj
+                                        .write_to_file(&file_path)
+                                        .whatever_context("could not save DICOM object to file")?;
+                                    info!("Stored {}", file_path.display());
+                                } else {
+                                    let mut out_buffer = Vec::new();
+                                    file_obj.write_all(&mut out_buffer)
+                                        .whatever_context("failed to write DICOM object to buffer")?;
+                                    let mut cursor = Cursor::new(out_buffer);
+                                    cursor.set_position(0);
+
+                                    let anonymization_result = anonymizer.anonymize(cursor)
+                                        .whatever_context("failed to anonymize DICOM object")?;
+
+                                    // output file name
+                                    let new_sop = anonymization_result.anonymized.get(tags::SOP_INSTANCE_UID);
+                                    if let Some(new_sop_elem) = new_sop {
+                                        // use anonymization result's sop instance uid in the output file name
+                                        let anon_sop_uid = new_sop_elem.to_str()
+                                            .whatever_context("could not retrieve anonymized SOP Instance UID")?
+                                            .to_string();
+                                        file_path.push(
+                                            anon_sop_uid.trim_end_matches('\0').to_string() + ".dcm",
+                                        ); 
+                                    } else {
+                                        // use the original sop instance uid in the file name
+                                        file_path.push(
+                                            sop_instance_uid.trim_end_matches('\0').to_string() + ".dcm",
+                                        );
+                                    }
+                                    
+                                    let output_file = File::create(&file_path)
+                                        .whatever_context(format!("failed to create {}", file_path.display()))?;
+                                    let _ = anonymization_result.write(output_file);
+                                    info!("Anonymized and stored {}", file_path.display());
+                                }
 
                                 // send C-STORE-RSP object
                                 // commands are always in implicit VR LE

@@ -52,6 +52,9 @@ struct App {
     /// Run in non-blocking mode (spins up an async task to handle each incoming stream)
     #[arg(short, long)]
     non_blocking: bool,
+    /// Anonymize incoming objects
+    #[arg(short, long)]
+    anonymize: bool,
 }
 
 fn create_cstore_response(

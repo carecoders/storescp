@@ -21,4 +21,5 @@ snafu = "0.8"
 tracing = "0.1.36"
 tracing-subscriber = "0.3.15"
 tokio = { version = "1.38.0", features = ["full"] }
+dicom-anonymization = "0.3.1"
 
